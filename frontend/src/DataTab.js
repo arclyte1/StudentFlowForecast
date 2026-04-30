@@ -1,7 +1,25 @@
 import React from 'react';
 import { groupDataByYear } from './utils';
 
-function DataTab({ data, loading, message, setFile, setFileName, file, fileName, handleFileChange, handleUpload, uploading, handleDeleteAll, loadData }) {
+function DataTab({
+  data,
+  loading,
+  message,
+  file,
+  fileName,
+  handleFileChange,
+  handleUpload,
+  uploading,
+  handleDeleteAll,
+  scriptFileName,
+  handleScriptFileChange,
+  handleScriptUpload,
+  scriptUploading,
+  scripts,
+  handleScriptDelete,
+  handleScriptRun,
+  scriptRunning
+}) {
   const groupedData = groupDataByYear(data);
   const years = Object.keys(groupedData).sort((a, b) => parseInt(b) - parseInt(a));
 
@@ -34,6 +52,75 @@ function DataTab({ data, loading, message, setFile, setFileName, file, fileName,
               {uploading ? 'Загрузка...' : 'Загрузить'}
             </button>
           </div>
+          <hr className="my-4" />
+          <h5 className="mb-3">Скрипты загрузки источников (Python)</h5>
+          <div className="d-flex flex-wrap gap-3 align-items-center mb-3">
+            <div>
+              <input
+                id="script-file-input"
+                type="file"
+                accept=".py"
+                onChange={handleScriptFileChange}
+                className="d-none"
+              />
+              <label htmlFor="script-file-input" className="btn btn-outline-primary">
+                Выбрать скрипт
+              </label>
+            </div>
+            {scriptFileName && (
+              <span className="text-success fw-bold">Выбран: {scriptFileName}</span>
+            )}
+            <button
+              className="btn btn-outline-success"
+              onClick={handleScriptUpload}
+              disabled={!scriptFileName || scriptUploading}
+            >
+              {scriptUploading ? 'Загрузка...' : 'Загрузить скрипт'}
+            </button>
+          </div>
+          <div className="small text-muted mb-3">
+            Контракт скрипта: функция <code>main()</code>, возвращающая список записей
+            или объект <code>{'{ data: [...] }'}</code> с полями:
+            <code> year, course, admission, transfers_in, expelled, academic_leave, restored</code>.
+          </div>
+          {scripts.length === 0 ? (
+            <div className="text-muted">Скрипты не загружены.</div>
+          ) : (
+            <div className="table-responsive">
+              <table className="table table-sm table-bordered align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Скрипт</th>
+                    <th>Размер (байт)</th>
+                    <th>Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {scripts.map((script) => (
+                    <tr key={script.name}>
+                      <td>{script.name}</td>
+                      <td>{script.size}</td>
+                      <td className="d-flex gap-2">
+                        <button
+                          className="btn btn-sm btn-primary"
+                          onClick={() => handleScriptRun(script.name)}
+                          disabled={scriptRunning === script.name}
+                        >
+                          {scriptRunning === script.name ? 'Выполнение...' : 'Запустить'}
+                        </button>
+                        <button
+                          className="btn btn-sm btn-outline-danger"
+                          onClick={() => handleScriptDelete(script.name)}
+                        >
+                          Удалить
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           {message.text && (
             <div className={`alert alert-${message.type === 'error' ? 'danger' : 'success'} mt-3 mb-0`}>
               {message.text}

@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Устанавливаем системные зависимости для cmdstanpy и Prophet
+# Устанавливаем базовые системные зависимости
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
@@ -11,9 +11,6 @@ RUN apt-get update && apt-get install -y \
 # Устанавливаем Python зависимости (кешируется)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Инициализируем cmdstan (нужно для Prophet)
-RUN python -c "import cmdstanpy; cmdstanpy.install_cmdstan()"
 
 COPY . .
 

@@ -13,9 +13,15 @@ function App() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [scriptFile, setScriptFile] = useState(null);
+  const [scriptFileName, setScriptFileName] = useState('');
+  const [scripts, setScripts] = useState([]);
+  const [scriptUploading, setScriptUploading] = useState(false);
+  const [scriptRunning, setScriptRunning] = useState('');
 
   useEffect(() => {
     loadData();
+    loadScripts();
   }, []);
 
   const loadData = async () => {
@@ -31,6 +37,18 @@ function App() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadScripts = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/api/source-scripts`);
+      setScripts(response.data.scripts || []);
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: 'Ошибка при загрузке списка скриптов: ' + (error.response?.data?.detail || error.message)
+      });
     }
   };
 
@@ -103,6 +121,81 @@ function App() {
     }
   };
 
+  const handleScriptFileChange = (e) => {
+    const selectedFile = e.target.files[0];
+    if (!selectedFile) return;
+    if (!selectedFile.name.endsWith('.py')) {
+      setMessage({ type: 'error', text: 'Пожалуйста, выберите Python скрипт (.py)' });
+      setScriptFile(null);
+      setScriptFileName('');
+      return;
+    }
+    setScriptFile(selectedFile);
+    setScriptFileName(selectedFile.name);
+    setMessage({ type: '', text: '' });
+  };
+
+  const handleScriptUpload = async () => {
+    if (!scriptFile) {
+      setMessage({ type: 'error', text: 'Выберите скрипт для загрузки' });
+      return;
+    }
+    setScriptUploading(true);
+    const formData = new FormData();
+    formData.append('file', scriptFile);
+    try {
+      const response = await axios.post(`${API_URL}/api/source-scripts`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setMessage({ type: 'success', text: `Скрипт загружен: ${response.data.name}` });
+      setScriptFile(null);
+      setScriptFileName('');
+      const input = document.getElementById('script-file-input');
+      if (input) input.value = '';
+      await loadScripts();
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: 'Ошибка загрузки скрипта: ' + (error.response?.data?.detail || error.message)
+      });
+    } finally {
+      setScriptUploading(false);
+    }
+  };
+
+  const handleScriptDelete = async (name) => {
+    if (!window.confirm(`Удалить скрипт ${name}?`)) return;
+    try {
+      await axios.delete(`${API_URL}/api/source-scripts/${encodeURIComponent(name)}`);
+      setMessage({ type: 'success', text: `Скрипт удален: ${name}` });
+      await loadScripts();
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: 'Ошибка удаления скрипта: ' + (error.response?.data?.detail || error.message)
+      });
+    }
+  };
+
+  const handleScriptRun = async (name) => {
+    setScriptRunning(name);
+    try {
+      const response = await axios.post(`${API_URL}/api/source-scripts/${encodeURIComponent(name)}/run`);
+      setMessage({
+        type: 'success',
+        text: `Скрипт ${name} выполнен. Загружено записей: ${response.data.records_added}`
+      });
+      await loadData();
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: 'Ошибка выполнения скрипта: ' + (error.response?.data?.detail || error.message)
+      });
+    } finally {
+      setScriptRunning('');
+    }
+  };
+
   return (
     <div className="container mt-4">
       <div className="bg-dark text-white p-4 mb-4 rounded shadow">
@@ -145,6 +238,14 @@ function App() {
             uploading={uploading}
             handleDeleteAll={handleDeleteAll}
             loadData={loadData}
+            scriptFileName={scriptFileName}
+            handleScriptFileChange={handleScriptFileChange}
+            handleScriptUpload={handleScriptUpload}
+            scriptUploading={scriptUploading}
+            scripts={scripts}
+            handleScriptDelete={handleScriptDelete}
+            handleScriptRun={handleScriptRun}
+            scriptRunning={scriptRunning}
           />
         )}
         {activeTab === 'forecast' && (

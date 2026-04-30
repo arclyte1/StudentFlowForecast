@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import {
   Line,
   XAxis,
@@ -25,6 +27,9 @@ function ForecastTab({ data }) {
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [forecastStatus, setForecastStatus] = useState('loading'); // 'loading', 'not_found', 'outdated', 'ok'
   const [forecastCreatedAt, setForecastCreatedAt] = useState(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const availableCourses = activeProcess === 'admission' ? [1] : [1, 2, 3, 4];
+  const exportRef = useRef(null);
 
   // Загружаем сохраненный прогноз при монтировании и при изменении данных
   useEffect(() => {
@@ -32,6 +37,13 @@ function ForecastTab({ data }) {
       loadSavedForecast();
     }
   }, [data]);
+
+  useEffect(() => {
+    // Для процесса "Приём" детальный прогноз корректен только для 1 курса.
+    if (activeProcess === 'admission' && selectedCourse && selectedCourse !== 1) {
+      setSelectedCourse(1);
+    }
+  }, [activeProcess, selectedCourse]);
 
   const loadSavedForecast = async () => {
     try {
@@ -154,7 +166,6 @@ function ForecastTab({ data }) {
         const nextYear = year + 1;
         
         for (let course = 2; course <= 4; course++) {
-          const prevYear = year - 1;
           const prevCourse = course - 1;
           
           let needsReverseCalculation = false;
@@ -256,6 +267,45 @@ function ForecastTab({ data }) {
     return tableData;
   };
 
+  const handleExportPdf = async () => {
+    if (!exportRef.current) return;
+    setExportingPdf(true);
+    try {
+      const canvas = await html2canvas(exportRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        windowWidth: exportRef.current.scrollWidth
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = pdfWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pdfHeight;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pdfHeight;
+      }
+
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      pdf.save(`forecast-report-${stamp}.pdf`);
+    } catch (err) {
+      setError(`Ошибка экспорта PDF: ${err.message || 'Не удалось сформировать файл'}`);
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   if (!data || data.length === 0) {
     return (
       <div className="card shadow-sm">
@@ -269,7 +319,7 @@ function ForecastTab({ data }) {
   }
 
   return (
-    <div className="card shadow-sm">
+    <div className="card shadow-sm" ref={exportRef}>
       <div className="card-body">
       {/* Заголовок и кнопка для построения/обновления прогноза */}
       <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
@@ -282,15 +332,26 @@ function ForecastTab({ data }) {
           )}
         </div>
         {/* Показываем кнопку только если прогноз устарел или не найден */}
-        {(forecastStatus === 'outdated' || forecastStatus === 'not_found' || !forecasts) && (
-          <button 
-            onClick={() => loadForecasts(true)} 
-            disabled={loading}
-            className={`btn ${loading ? 'btn-secondary' : forecastStatus === 'outdated' ? 'btn-warning' : 'btn-success'}`}
-          >
-            {loading ? 'Построение...' : (forecastStatus === 'outdated' ? 'Обновить прогноз (данные изменились)' : 'Построить прогноз')}
-          </button>
-        )}
+        <div className="d-flex gap-2">
+          {(forecastStatus === 'outdated' || forecastStatus === 'not_found' || !forecasts) && (
+            <button 
+              onClick={() => loadForecasts(true)} 
+              disabled={loading}
+              className={`btn ${loading ? 'btn-secondary' : forecastStatus === 'outdated' ? 'btn-warning' : 'btn-success'}`}
+            >
+              {loading ? 'Построение...' : (forecastStatus === 'outdated' ? 'Обновить прогноз (данные изменились)' : 'Построить прогноз')}
+            </button>
+          )}
+          {forecasts && Object.keys(forecasts).length > 0 && (
+            <button
+              onClick={handleExportPdf}
+              disabled={exportingPdf}
+              className="btn btn-outline-primary"
+            >
+              {exportingPdf ? 'Экспорт PDF...' : 'Экспорт в PDF'}
+            </button>
+          )}
+        </div>
       </div>
 
       {forecastStatus === 'outdated' && !loading && (
@@ -395,11 +456,11 @@ function ForecastTab({ data }) {
                           return labels[value] || value;
                         }}
                       />
-                      <Bar dataKey="course1" stackId="a" fill="#3498db" name="course1" />
-                      <Bar dataKey="course2" stackId="a" fill="#2ecc71" name="course2" />
-                      <Bar dataKey="course3" stackId="a" fill="#f39c12" name="course3" />
-                      <Bar dataKey="course4" stackId="a" fill="#9b59b6" name="course4" />
-                      <Line type="monotone" dataKey="total" stroke="#e74c3c" strokeWidth={3} dot={{ r: 5 }} name="total" />
+                      <Bar dataKey="course1" stackId="a" fill="#3498db" name="course1" animationDuration={750} />
+                      <Bar dataKey="course2" stackId="a" fill="#2ecc71" name="course2" animationDuration={750} />
+                      <Bar dataKey="course3" stackId="a" fill="#f39c12" name="course3" animationDuration={750} />
+                      <Bar dataKey="course4" stackId="a" fill="#9b59b6" name="course4" animationDuration={750} />
+                      <Line type="monotone" dataKey="total" stroke="#e74c3c" strokeWidth={3} dot={{ r: 5 }} name="total" animationDuration={750} />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
@@ -457,11 +518,10 @@ function ForecastTab({ data }) {
       <div className="course-selector">
         <label>Выберите курс для детального просмотра:</label>
         <select value={selectedCourse || ''} onChange={(e) => setSelectedCourse(e.target.value ? parseInt(e.target.value) : null)}>
-          <option value="">Все курсы</option>
-          <option value="1">Курс 1</option>
-          <option value="2">Курс 2</option>
-          <option value="3">Курс 3</option>
-          <option value="4">Курс 4</option>
+          {activeProcess !== 'admission' && <option value="">Все курсы</option>}
+          {availableCourses.map(course => (
+            <option key={course} value={course}>Курс {course}</option>
+          ))}
         </select>
       </div>
 
@@ -480,7 +540,7 @@ function ForecastTab({ data }) {
           )
         ) : (
           <div className="all-courses-charts">
-            {[1, 2, 3, 4].map(course => (
+            {availableCourses.map(course => (
               forecasts[course] && forecasts[course][activeProcess] ? (
                 <div key={course} className="course-chart-wrapper">
                   <h4 className="mb-3">Курс {course}</h4>
@@ -578,6 +638,7 @@ function ForecastChart({ data, processName, course }) {
           fillOpacity={0.6}
           name="Факт"
           strokeWidth={2}
+          animationDuration={750}
         />
         <Area
           type="monotone"
@@ -588,6 +649,7 @@ function ForecastChart({ data, processName, course }) {
           name="Верхняя граница"
           strokeWidth={1}
           strokeDasharray="5 5"
+          animationDuration={750}
         />
         <Area
           type="monotone"
@@ -598,6 +660,7 @@ function ForecastChart({ data, processName, course }) {
           name="Нижняя граница"
           strokeWidth={1}
           strokeDasharray="5 5"
+          animationDuration={750}
         />
         <Line
           type="monotone"
@@ -607,6 +670,7 @@ function ForecastChart({ data, processName, course }) {
           strokeDasharray="5 5"
           name="Прогноз"
           dot={{ r: 4 }}
+          animationDuration={750}
         />
       </AreaChart>
     </ResponsiveContainer>
